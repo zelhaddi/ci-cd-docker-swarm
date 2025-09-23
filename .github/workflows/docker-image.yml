@@ -1,0 +1,36 @@
+name: CI/CD Docker Swarm
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Login Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build Docker image
+      run: docker build -t ${{ secrets.DOCKER_USERNAME }}/ci-cd-test:latest .
+
+    - name: Push Docker image
+      run: docker push ${{ secrets.DOCKER_USERNAME }}/ci-cd-test:latest
+
+    - name: Deploy via SSH
+      env:
+        SWARM_HOST: ${{ secrets.SWARM_HOST }}
+        SWARM_USER: ${{ secrets.SWARM_USER }}
+        SWARM_KEY: ${{ secrets.SWARM_KEY }}
+      run: |
+        echo "$SWARM_KEY" > key.pem
+        chmod 600 key.pem
+        scp -i key.pem docker-compose.yml $SWARM_USER@$SWARM_HOST:/tmp/docker-compose.yml
+        ssh -i key.pem $SWARM_USER@$SWARM_HOST "docker stack deploy -c /tmp/docker-compose.yml my_service"
